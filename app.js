@@ -1,0 +1,18 @@
+let qty=1,price=150,maxQty=10,currentOrder=null;
+const $=s=>document.querySelector(s);
+function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";setTimeout(()=>e.style.display="none",3500)}
+async function api(url,opts={}){const r=await fetch(url,{...opts,credentials:"same-origin"});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Request failed");return d}
+function showAuth(){$("#auth").classList.toggle("hidden");location.hash="auth"}
+function changeQty(n){qty=Math.max(1,Math.min(maxQty,qty+n));$("#qty").textContent=qty;$("#total").textContent="₹"+(qty*price)}
+async function refresh(){try{const d=await api("/api/me");$("#userName").textContent=d.user.name;$("#credits").textContent=d.user.credits;$("#status").textContent="Logged in";$("#dashboardMsg").textContent=d.user.email;$("#authNav").innerHTML='<button class="small" onclick="logout()">Logout</button>';}catch{}}
+async function logout(){await fetch("/api/logout",{method:"POST"});location.reload()}
+$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();try{const d=await api("/api/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});toast("Welcome "+d.user.name);$("#auth").classList.add("hidden");refresh()}catch(x){toast(x.message)}});
+$("#registerForm").addEventListener("submit",async e=>{e.preventDefault();try{const d=await api("/api/register",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});toast("Account created");$("#auth").classList.add("hidden");refresh()}catch(x){toast(x.message)}});
+async function loadSettings(){try{const d=await api("/api/public/settings");price=d.creditPrice;maxQty=d.maxCredits;$("#maxQty").textContent=maxQty;changeQty(0)}catch{}}
+async function createOrder(){try{const d=await api("/api/payments/create",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({credits:qty})});currentOrder=d.orderId;$("#payArea").classList.remove("hidden");$("#orderText").textContent=`Order ${d.orderId} · ${d.credits} credits · ₹${d.amount}`;$("#qr").src=d.qr;$('#paymentForm [name=orderId]').value=d.orderId;toast("QR created. Pay and submit UTR + receipt.");}catch(e){toast(e.message)}}
+$("#paymentForm").addEventListener("submit",async e=>{e.preventDefault();const fd=new FormData(e.target);try{const r=await fetch(`/api/payments/${encodeURIComponent(fd.get("orderId"))}/submit`,{method:"POST",body:fd});const d=await r.json();if(!r.ok)throw new Error(d.error);toast("Payment submitted for manual review.");e.target.reset();$("#payArea").classList.add("hidden");}catch(x){toast(x.message)}});
+async function external(name){try{const d=await api("/api/external/"+name);$("#apiOutput").textContent=JSON.stringify(d,null,2)}catch(e){$("#apiOutput").textContent=e.message}}
+async function linkTelegram(){try{const d=await api("/api/telegram/link-code",{method:"POST"});$("#tgCode").textContent=`Your one-time code: ${d.code} (valid for 10 minutes). Send /link ${d.code} to your Telegram bot.`}catch(e){toast(e.message)}}
+async function announcements(){try{const d=await api("/api/announcements");$("#announcements").innerHTML=d.items.length?d.items.map(x=>`<article><b>${esc(x.title)}</b><p>${esc(x.body)}</p><small class="muted">${esc(x.created_at)}</small></article>`).join("<hr>"):"No announcements yet."}catch{$("#announcements").textContent="Could not load announcements."}}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+loadSettings();refresh();announcements();
